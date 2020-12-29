@@ -13,12 +13,12 @@
         "radio_0": {
             "enable": true,
             "type": "SX1250",
-            "freq": 867500000,
-            "rssi_offset": -215.4,
+            "freq": 486600000,
+            "rssi_offset": -207,
             "rssi_tcomp": {"coeff_a": 0, "coeff_b": 0, "coeff_c": 20.41, "coeff_d": 2162.56, "coeff_e": 0},
             "tx_enable": true,
-            "tx_freq_min": 863000000,
-            "tx_freq_max": 870000000,
+            "tx_freq_min" : 486290000,
+            "tx_freq_max" : 510000000,
             "tx_gain_lut":[
                 {"rf_power": 12, "pa_gain": 0, "pwr_idx": 15},
                 {"rf_power": 13, "pa_gain": 0, "pwr_idx": 16},
@@ -41,24 +41,70 @@
         "radio_1": {
             "enable": true,
             "type": "SX1250",
-            "freq": 868500000,
-            "rssi_offset": -215.4,
+            "freq": 487400000,
+            "rssi_offset": -207,
             "rssi_tcomp": {"coeff_a": 0, "coeff_b": 0, "coeff_c": 20.41, "coeff_d": 2162.56, "coeff_e": 0},
             "tx_enable": false
         },
-        "chan_multiSF_0": {"enable": true, "radio": 1, "if": -400000},
-        "chan_multiSF_1": {"enable": true, "radio": 1, "if": -200000},
-        "chan_multiSF_2": {"enable": true, "radio": 1, "if":  0},
-        "chan_multiSF_3": {"enable": true, "radio": 0, "if": -400000},
-        "chan_multiSF_4": {"enable": true, "radio": 0, "if": -200000},
-        "chan_multiSF_5": {"enable": true, "radio": 0, "if":  0},
-        "chan_multiSF_6": {"enable": true, "radio": 0, "if":  200000},
-        "chan_multiSF_7": {"enable": true, "radio": 0, "if":  400000},
-        "chan_Lora_std":  {"enable": true, "radio": 1, "if": -200000, "bandwidth": 250000, "spread_factor": 7,
-                           "implicit_hdr": false, "implicit_payload_length": 17, "implicit_crc_en": false, "implicit_coderate": 1},
-        "chan_FSK":       {"enable": true, "radio": 1, "if":  300000, "bandwidth": 125000, "datarate": 50000}
+        "chan_multiSF_0" : {
+            "enable" : true,
+            "if" : -300000,
+            "radio" : 0
+        },
+        "chan_multiSF_1" : {
+            "enable" : true,
+            "if" : -100000,
+            "radio" : 0
+        },
+        "chan_multiSF_2" : {
+            "radio" : 0,
+            "if" : 100000,
+            "enable" : true
+        },
+        "chan_multiSF_3" : {
+            "enable" : true,
+            "if" : 300000,
+            "radio" : 0
+        },
+        "chan_multiSF_4" : {
+            "if" : -300000,
+            "radio" : 1,
+            "enable" : true
+        },
+        "chan_multiSF_5" : {
+            "enable" : true,
+            "radio" : 1,
+            "if" : -100000
+        },
+        "chan_multiSF_6" : {
+            "enable" : true,
+            "if" : 100000,
+            "radio" : 1
+        },
+        "chan_multiSF_7" : {
+            "if" : 300000,
+            "radio" : 1,
+            "enable" : true
+        },
+        "chan_Lora_std" : {
+            "bandwidth" : 250000,
+            "implicit_coderate" : 1,
+            "implicit_crc_en" : false,
+            "implicit_hdr" : false,
+            "enable" : true,
+            "radio" : 1,
+            "if" : -200000,
+            "implicit_payload_length" : 17,
+            "spread_factor" : 7
+        },
+        "chan_FSK" : {
+            "if" : 300000,
+            "radio" : 1,
+            "enable" : false,
+            "datarate" : 50000,
+            "bandwidth" : 125000
+        }
     },
-
     "gateway_conf": {
         "gps_i2c_path": "/dev/i2c-1",
         "gateway_ID": "AA555A0000000000",
