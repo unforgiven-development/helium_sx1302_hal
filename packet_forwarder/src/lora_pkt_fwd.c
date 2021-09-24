@@ -109,7 +109,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define STD_FSK_PREAMB  5
 
 #define STATUS_SIZE     200
-#define TX_BUFF_SIZE    ((540 * NB_PKT_MAX) + 30 + STATUS_SIZE)
+#define TX_BUFF_SIZE    ((548 * NB_PKT_MAX) + 30 + STATUS_SIZE)
 #define ACK_BUFF_SIZE   64
 
 #define UNIX_GPS_EPOCH_OFFSET 315964800 /* Number of seconds ellapsed between 01.Jan.1970 00:00:00
@@ -2023,7 +2023,7 @@ void thread_up(void) {
                 }
 
                 /* Signal RSSI, payload size */
-                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"rssis\":%.0f", roundf(p->rssis));
+                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"rssis\":%.3f", p->rssis);
                 if (j > 0) {
                     buff_index += j;
                 } else {
@@ -2066,7 +2066,7 @@ void thread_up(void) {
             }
 
             /* Channel RSSI, payload size, 18-23 useful chars */
-            j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"rssi\":%.0f,\"size\":%u", roundf(p->rssic), p->size);
+            j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"rssi\":%.3f,\"size\":%u", p->rssic, p->size);
             if (j > 0) {
                 buff_index += j;
             } else {
