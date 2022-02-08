@@ -1326,17 +1326,6 @@ int lgw_send(struct lgw_pkt_tx_s * pkt_data) {
         return LGW_HAL_ERROR;
     }
 
-    /* Set PA gain with AD5338R when using full duplex CN490 ref design */
-    if (CONTEXT_BOARD.full_duplex == true) {
-        uint8_t volt_val[AD5338R_CMD_SIZE] = {0x39, VOLTAGE2HEX_H(2.51), VOLTAGE2HEX_L(2.51)}; /* set to 2.51V */
-        err = ad5338r_write(ad_fd, I2C_PORT_DAC_AD5338R, volt_val);
-        if (err != LGW_I2C_SUCCESS) {
-            printf("ERROR: failed to set voltage by ad5338r\n");
-            return LGW_HAL_ERROR;
-        }
-        printf("INFO: AD5338R: Set DAC output to 0x%02X 0x%02X\n", (uint8_t)VOLTAGE2HEX_H(2.51), (uint8_t)VOLTAGE2HEX_L(2.51));
-    }
-
     /* Start Listen-Before-Talk */
     if (CONTEXT_SX1261.lbt_conf.enable == true) {
         err = lgw_lbt_start(&CONTEXT_SX1261, pkt_data);
