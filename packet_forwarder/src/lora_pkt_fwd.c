@@ -3631,6 +3631,8 @@ void thread_gps_tty(void) {
                         frame_size = 0;
                     } else if (latest_msg == UBX_NAV_TIMEGPS) {
                         gps_process_sync();
+                    } else if (latest_msg == UBX_NAV_PVT) {
+                        gps_process_coords();
                     }
                 }
             } else if (serial_buff[rd_idx] == (char)LGW_GPS_NMEA_SYNC_CHAR) {
