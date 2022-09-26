@@ -95,7 +95,7 @@
             "if": 300000
         },
         "chan_Lora_std": {
-            /* Channel 65 (fat channel), 912.6 Mhz */
+            /* Channel 65 (fat channel), 904.6 Mhz */
             "enable": true,
             "radio": 0,
             "if": 300000,
