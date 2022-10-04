@@ -110,7 +110,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 #define STATUS_SIZE     200
 #define TX_BUFF_SIZE    ((540 * NB_PKT_MAX) + 30 + STATUS_SIZE)
-#define ACK_BUFF_SIZE   64
+#define ACK_BUFF_SIZE   80
 
 #define UNIX_GPS_EPOCH_OFFSET 315964800 /* Number of seconds ellapsed between 01.Jan.1970 00:00:00
                                                                           and 06.Jan.1980 00:00:00 */
@@ -1067,8 +1067,8 @@ static double difftimespec(struct timespec end, struct timespec beginning) {
     return x;
 }
 
-static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error, int32_t error_value) {
-    uint8_t buff_ack[ACK_BUFF_SIZE]; /* buffer to give feedback to server */
+static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error, int32_t error_value, uint32_t timestamp_sent) {
+    uint8_t buff_ack[ACK_BUFF_SIZE]; /* buffer to give feedback to server, max used: 70 */
     int buff_index;
     int j;
 
@@ -1084,11 +1084,11 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
     *(uint32_t *)(buff_ack + 8) = net_mac_l;
     buff_index = 12; /* 12-byte header */
 
-    /* Put no JSON string if there is nothing to report */
+    /* start of JSON structure */
+    memcpy((void *)(buff_ack + buff_index), (void *)"{\"txpk_ack\":{", 13);
+    buff_index += 13;
+
     if (error != JIT_ERROR_OK) {
-        /* start of JSON structure */
-        memcpy((void *)(buff_ack + buff_index), (void *)"{\"txpk_ack\":{", 13);
-        buff_index += 13;
         /* set downlink error/warning status in JSON structure */
         switch( error ) {
             case JIT_ERROR_TX_POWER:
@@ -1167,12 +1167,22 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
                 /* Do nothing */
                 break;
         }
-        /* end of JSON structure */
-        memcpy((void *)(buff_ack + buff_index), (void *)"}}", 2);
-        buff_index += 2;
     }
 
-    buff_ack[buff_index] = 0; /* add string terminator, for safety */
+    /* If anything was transmitted, report transmit timestamp */
+    if (error == JIT_ERROR_OK || error == JIT_ERROR_TX_POWER) {
+        j = snprintf((char *)(buff_ack + buff_index), ACK_BUFF_SIZE-buff_index, ",\"tmst\":%u", timestamp_sent);
+        if (j > 0) {
+            buff_index += j; /* at most, 17 characters */
+        } else {
+            MSG("ERROR: [up] snprintf failed line %u\n", (__LINE__ - 4));
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    /* end of JSON structure */
+    memcpy((void *)(buff_ack + buff_index), (void *)"}}", 3); /* include nul */
+    buff_index += 3;
 
     /* send datagram to server */
     return send(sock_down, (void *)buff_ack, buff_index, 0);
@@ -2650,7 +2660,7 @@ void thread_down(void) {
                             json_value_free(root_val);
 
                             /* send acknoledge datagram to server */
-                            send_tx_ack(buff_down[1], buff_down[2], JIT_ERROR_GPS_UNLOCKED, 0);
+                            send_tx_ack(buff_down[1], buff_down[2], JIT_ERROR_GPS_UNLOCKED, 0, 0);
                             continue;
                         }
                     } else {
@@ -2658,7 +2668,7 @@ void thread_down(void) {
                         json_value_free(root_val);
 
                         /* send acknoledge datagram to server */
-                        send_tx_ack(buff_down[1], buff_down[2], JIT_ERROR_GPS_UNLOCKED, 0);
+                        send_tx_ack(buff_down[1], buff_down[2], JIT_ERROR_GPS_UNLOCKED, 0, 0);
                         continue;
                     }
 
@@ -2920,7 +2930,7 @@ void thread_down(void) {
             }
 
             /* Send acknoledge datagram to server */
-            send_tx_ack(buff_down[1], buff_down[2], jit_result, warning_value);
+            send_tx_ack(buff_down[1], buff_down[2], jit_result, warning_value, txpkt.count_us);
         }
     }
     MSG("\nINFO: End of downstream thread\n");
