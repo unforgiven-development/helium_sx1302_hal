@@ -1156,7 +1156,7 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
             break;
         case JIT_ERROR_OK:
             memcpy((void *)(buff_ack + buff_index), (void *)"\"NONE\"", 6);
-            buff_index += 9;
+            buff_index += 6;
             break;
         default:
             memcpy((void *)(buff_ack + buff_index), (void *)"\"UNKNOWN\"", 9);
