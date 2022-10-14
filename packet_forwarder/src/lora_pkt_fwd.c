@@ -109,7 +109,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define STD_FSK_PREAMB  5
 
 #define STATUS_SIZE     200
-#define TX_BUFF_SIZE    ((540 * NB_PKT_MAX) + 30 + STATUS_SIZE)
+#define TX_BUFF_SIZE    ((560 * NB_PKT_MAX) + 30 + STATUS_SIZE)
 #define ACK_BUFF_SIZE   80
 
 #define UNIX_GPS_EPOCH_OFFSET 315964800 /* Number of seconds ellapsed between 01.Jan.1970 00:00:00
@@ -1865,8 +1865,8 @@ void thread_up(void) {
                 exit(EXIT_FAILURE);
             }
 
-            /* RAW timestamp, 8-17 useful chars */
-            j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"tmst\":%u", p->count_us);
+            /* RAW timestamp, 18-36 useful chars */
+            j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"tmst\":%u,\"tm32\":%u", p->count_us, p->count_32);
             if (j > 0) {
                 buff_index += j;
             } else {
