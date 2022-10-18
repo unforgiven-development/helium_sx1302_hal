@@ -1177,7 +1177,7 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
 
     /* end of JSON structure */
     memcpy((void *)(buff_ack + buff_index), (void *)"}}", 3); /* include nul */
-    buff_index += 3;
+    buff_index += 2;
 
     /* send datagram to server */
     return send(sock_down, (void *)buff_ack, buff_index, 0);
