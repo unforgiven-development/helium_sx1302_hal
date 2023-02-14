@@ -18,7 +18,7 @@ INCLUDES = $(wildcard inc/*.h) $(wildcard ../libtools/inc/*.h)
 
 ### linking options
 
-LIBS := -lloragw -ltinymt32 -lrt -lm -lcursor
+LIBS := -lloragw -ltinymt32 -lrt -lm -lcursor -lparson
 
 ### general build targets
 
@@ -38,6 +38,7 @@ ifneq ($(strip $(TARGET_IP)),)
 	@ssh $(TARGET_USR)@$(TARGET_IP) "mkdir -p $(TARGET_DIR)"
 	@scp test_loragw_* $(TARGET_USR)@$(TARGET_IP):$(TARGET_DIR)
 	@scp ../tools/reset_lgw.sh $(TARGET_USR)@$(TARGET_IP):$(TARGET_DIR)
+	@scp ./tst/channels_conf.json $(TARGET_USR)@$(TARGET_IP):$(TARGET_DIR)
   else
 	@echo "ERROR: TARGET_USR is not configured in target.cfg"
   endif
