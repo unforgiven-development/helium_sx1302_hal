@@ -55,6 +55,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include "jitqueue.h"
 #include "parson.h"
 #include "base64.h"
+#include "lora_pcap.h"
 #include "loragw_hal.h"
 #include "loragw_aux.h"
 #include "loragw_reg.h"
@@ -129,6 +130,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 /* signal handling variables */
 volatile bool exit_sig = false; /* 1 -> application terminates cleanly (shut down hardware, close open files, etc) */
 volatile bool quit_sig = false; /* 1 -> application terminates without shutting down the hardware */
+volatile bool reload_sig = false; /* 1 -> application re-opens logs/PCAP output */
 
 /* packets filtering configuration variables */
 static bool fwd_valid_pkt = true; /* packets with PAYLOAD CRC OK are forwarded */
@@ -247,6 +249,14 @@ static uint32_t nb_pkt_received_fsk = 0;
 static struct lgw_conf_debug_s debugconf;
 static uint32_t nb_pkt_received_ref[16];
 
+/* Packet capture (PCAP) */
+static lora_pcap_session *pcap = NULL;
+static char  *pcap_path = NULL;
+static pthread_mutex_t pcap_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Gateway EUI */
+static uint64_t eui;
+
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DECLARATION ---------------------------------------- */
 
@@ -300,6 +310,8 @@ static void sig_handler(int sigio) {
         quit_sig = true;
     } else if ((sigio == SIGINT) || (sigio == SIGTERM)) {
         exit_sig = true;
+    } else if (sigio == SIGHUP) {
+        reload_sig = true;
     }
     return;
 }
@@ -964,6 +976,15 @@ static int parse_gateway_configuration(const char * conf_file) {
         MSG("INFO: Auto-quit after %u non-acknowledged PULL_DATA\n", autoquit_threshold);
     }
 
+    /* Packet capture (PCAP) file */
+    str = json_object_get_string(conf_obj, "pcap_dump_path");
+    if (str == NULL) {
+        MSG("INFO: No PCAP path specified. Will not create PCAP file.\n");
+    } else {
+        pcap_path = strdup(str);
+        MSG("INFO: PCAP path specified. Will dump packets to %s.\n", pcap_path);
+    }
+
     /* free JSON parsing data structure */
     json_value_free(root_val);
     return 0;
@@ -1188,7 +1209,7 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
 
 int main(int argc, char ** argv)
 {
-    struct sigaction sigact; /* SIGQUIT&SIGINT&SIGTERM signal handling */
+    struct sigaction sigact; /* SIGHUP&SIGQUIT&SIGINT&SIGTERM signal handling */
     int i; /* loop variable and temporary variable for return value */
     int x;
     int l, m;
@@ -1244,7 +1265,6 @@ int main(int argc, char ** argv)
     /* SX1302 data variables */
     uint32_t trig_tstamp;
     uint32_t inst_tstamp;
-    uint64_t eui;
     float temperature;
 
     /* statistics variable */
@@ -1427,8 +1447,23 @@ int main(int argc, char ** argv)
     i = lgw_get_eui(&eui);
     if (i != LGW_HAL_SUCCESS) {
         printf("ERROR: failed to get concentrator EUI\n");
+        eui = 0xffffffffffffffffUL;
     } else {
         printf("INFO: concentrator EUI: 0x%016" PRIx64 "\n", eui);
+    }
+
+    /* Start up PCAP if requested */
+    if (pcap_path != NULL) {
+        pcap = lora_pcap_session_new(pcap_path, eui);
+        if (pcap == NULL) {
+            MSG("ERROR: PCAP requested but unable to open pcap file %s\n", pcap_path);
+            exit(EXIT_FAILURE);
+        }
+        x = lora_pcap_session_start(pcap);
+        if (x != 0) {
+            MSG("ERROR: PCAP requested by unable to write to pcap file %s\n", pcap_path);
+            exit(EXIT_FAILURE);
+        }
     }
 
     /* spawn threads to manage upstream and downstream */
@@ -1473,6 +1508,7 @@ int main(int argc, char ** argv)
     sigaction(SIGQUIT, &sigact, NULL); /* Ctrl-\ */
     sigaction(SIGINT, &sigact, NULL); /* Ctrl-C */
     sigaction(SIGTERM, &sigact, NULL); /* default "kill" command */
+    sigaction(SIGHUP, &sigact, NULL); /* Reload */
 
     /* main loop task : statistics collection */
     while (!exit_sig && !quit_sig) {
@@ -1697,6 +1733,8 @@ void thread_up(void) {
 
     /* allocate memory for packet fetching and processing */
     struct lgw_pkt_rx_s rxpkt[NB_PKT_MAX]; /* array containing inbound packets + metadata */
+    struct timespec rxpkt_utc[NB_PKT_MAX]; /* array containing inbound packet times */
+    bool rxpkt_utc_ok[NB_PKT_MAX];
     struct lgw_pkt_rx_s *p; /* pointer on a RX packet */
     int nb_pkt;
 
@@ -1718,8 +1756,10 @@ void thread_up(void) {
     struct timespec recv_time;
 
     /* GPS synchronization variables */
-    struct timespec pkt_utc_time;
+    struct timespec *pkt_utc_time;
+    struct timespec now;
     struct tm * x; /* broken-up UTC time */
+    bool *pkt_utc_ok; /* pointer on current time ok */
     struct timespec pkt_gps_time;
     uint64_t pkt_gps_time_ms;
 
@@ -1752,6 +1792,31 @@ void thread_up(void) {
         if (nb_pkt == LGW_HAL_ERROR) {
             MSG("ERROR: [up] failed packet fetch, exiting\n");
             exit(EXIT_FAILURE);
+        }
+
+        /* Get time of day now, as fallback for less precise packet timing */
+        clock_gettime(CLOCK_REALTIME, &now);
+
+        if (reload_sig) {
+            /* acknowledge reload */
+            MSG("INFO: Reload signal received.\n");
+            reload_sig = false;
+            pthread_mutex_lock(&pcap_lock);
+            if (pcap != NULL) {
+                lora_pcap_session_stop(pcap);
+                lora_pcap_session_free(pcap);
+                pcap = lora_pcap_session_new(pcap_path, eui);
+                if (pcap == NULL) {
+                    MSG("ERROR: Could not reopen PCAP file %s\n", pcap_path);
+                    exit(EXIT_FAILURE);
+                }
+                i = lora_pcap_session_start(pcap);
+                if (i != 0) {
+                    MSG("ERROR: Could not initialize PCAP file %s\n", pcap_path);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            pthread_mutex_unlock(&pcap_lock);
         }
 
         /* check if there are status report to send */
@@ -1794,6 +1859,8 @@ void thread_up(void) {
         pkt_in_dgram = 0;
         for (i = 0; i < nb_pkt; ++i) {
             p = &rxpkt[i];
+            pkt_utc_time = &rxpkt_utc[i];
+            pkt_utc_ok = &rxpkt_utc_ok[i];
 
             /* Get mote information from current packet (addr, fcnt) */
             /* FHDR - DevAddr */
@@ -1877,11 +1944,11 @@ void thread_up(void) {
             /* Packet RX time (GPS based), 37 useful chars */
             if (ref_ok == true) {
                 /* convert packet timestamp to UTC absolute time */
-                j = lgw_cnt2utc(local_ref, p->count_us, &pkt_utc_time);
+                j = lgw_cnt2utc(local_ref, p->count_us, pkt_utc_time);
                 if (j == LGW_GPS_SUCCESS) {
                     /* split the UNIX timestamp to its calendar components */
-                    x = gmtime(&(pkt_utc_time.tv_sec));
-                    j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"time\":\"%04i-%02i-%02iT%02i:%02i:%02i.%06liZ\"", (x->tm_year)+1900, (x->tm_mon)+1, x->tm_mday, x->tm_hour, x->tm_min, x->tm_sec, (pkt_utc_time.tv_nsec)/1000); /* ISO 8601 format */
+                    x = gmtime(&(pkt_utc_time->tv_sec));
+                    j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"time\":\"%04i-%02i-%02iT%02i:%02i:%02i.%06liZ\"", (x->tm_year)+1900, (x->tm_mon)+1, x->tm_mday, x->tm_hour, x->tm_min, x->tm_sec, (pkt_utc_time->tv_nsec)/1000); /* ISO 8601 format */
                     if (j > 0) {
                         buff_index += j;
                     } else {
@@ -1902,6 +1969,7 @@ void thread_up(void) {
                     }
                 }
             }
+            *pkt_utc_ok = ref_ok;
 
             /* Packet concentrator channel, RF chain & RX frequency, 34-36 useful chars */
             j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"chan\":%1u,\"rfch\":%1u,\"freq\":%.6lf,\"mid\":%2u", p->if_chain, p->rf_chain, ((double)p->freq_hz / 1e6), p->modem_id);
@@ -2209,6 +2277,28 @@ void thread_up(void) {
             }
         }
         pthread_mutex_unlock(&mx_meas_up);
+
+        /* PCAP dump if configured */
+	pthread_mutex_lock(&pcap_lock);
+        if (pcap != NULL) {
+            for (i=0; i < nb_pkt; ++i) {
+                p = &rxpkt[i];
+                if (rxpkt_utc_ok[i]) {
+                    j = lora_pcap_session_write(pcap, p, &rxpkt_utc[i]);
+                } else {
+                    j = lora_pcap_session_write(pcap, p, &now);
+                }
+                if (j != 0) {
+                    MSG("ERROR: Could not write to PCAP file %s\n", pcap_path);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            if (lora_pcap_session_flush(pcap) != 0) {
+                MSG("ERROR: Could not flush to PCAP file %s\n", pcap_path);
+                exit(EXIT_FAILURE);
+            }
+        }
+	pthread_mutex_unlock(&pcap_lock);
     }
     MSG("\nINFO: End of upstream thread\n");
 }
