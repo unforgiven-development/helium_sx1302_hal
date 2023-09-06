@@ -50,9 +50,12 @@ enum jit_error_e {
     JIT_ERROR_COLLISION_PACKET, /* A packet is already enqueued for this timeframe */
     JIT_ERROR_COLLISION_BEACON, /* A beacon is planned for this timeframe */
     JIT_ERROR_TX_FREQ,      /* The required frequency for downlink is not supported */
-    JIT_ERROR_TX_POWER,     /* The required power for downlink is not supported */
+    JIT_ERROR_TX_POWER,     /* The required power for downlink is not supported,
+                               dropped the transmission. */
     JIT_ERROR_GPS_UNLOCKED, /* GPS timestamp could not be used as GPS is unlocked */
-    JIT_ERROR_INVALID       /* Packet is invalid */
+    JIT_ERROR_INVALID,      /* Packet is invalid */
+    JIT_WARN_TX_POWER       /* The required power for downlink is not supported,
+                               used a lower version instead. */
 };
 
 struct jit_node_s {
